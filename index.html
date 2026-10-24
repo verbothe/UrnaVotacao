@@ -114,27 +114,29 @@ function render(){
  $("tabs").innerHTML=ABAS.map(a=>'<button class="'+(a[0]===aba?'on':'')+'" onclick="aba=\''+a[0]+'\';render()">'+a[1]+'</button>').join("");
  $("dem").innerHTML=demo?'<div class="dem">MODO DEMONSTRAÇÃO · dados fictícios, só para ver o painel. Em Dados, saia da demonstração.</div>':"";
  $("view").innerHTML={apuracao:vApuracao,part:vPart,reg:vReg,al:vAl,dados:()=>vLive()+'<div style="height:12px"></div>'+vDados()}[aba]()}
-let CFG={key:"",eu:false,seg:60,ids:{lideres:"262868986267077",voluntarios:"262875651898074"}};
+let CFG={key:"",eu:false,seg:60,ids:{lideres:"262868986267077",voluntarios:"262875651898074,262963651580060"}};
 try{const c=JSON.parse(localStorage.getItem("painel_cfg")||"null");if(c)CFG=Object.assign(CFG,c,{ids:Object.assign(CFG.ids,c.ids||{})})}catch(e){}
 let ult="",err="",pausa=false,tm=null,busy=false;
 const salvarC=()=>{try{localStorage.setItem("painel_cfg",JSON.stringify(CFG))}catch(e){}};
 function liveTxt(){return !CFG.key?"○ Sem conexão com o Jotform (configure na aba Dados)":err?"⚠ "+err:pausa?"⏸ Atualização pausada":"● Ao vivo · atualizado às "+(ult||"…")}
 function conv(s,tp){
  const A=Object.values(s.answers||{}),get=re=>{const a=A.find(x=>re.test(norm(x.text||"")));return a&&a.answer!=null?(Array.isArray(a.answer)?a.answer.join(", "):String(a.answer)).trim():""};
- const who=tp==="voluntarios"?get(/quem e voce/):get(/nome completo/);
+ let who=tp==="voluntarios"?get(/quem e voce/):get(/nome completo/);
+ if(tp==="voluntarios"&&/^outro/i.test(norm(who))){const o=get(/nome.*lista/);who=o?"Outro: "+o:who}
  const v=[1,2,3].map(k=>code(get(new RegExp("^"+k+"\\D{0,2}voto"))));
  if(!who&&!v.some(x=>x))return null;
  return {t:s.created_at||"",who,dep:get(/departamento/),v}}
 async function buscar(tp){
  if(!CFG.key||busy)return;busy=true;err="";
  try{
-  const base=(CFG.eu?"https://eu-api.jotform.com":"https://api.jotform.com")+"/form/"+CFG.ids[tp]+"/submissions";
-  let all=[],off=0;
-  for(;;){
-   const r=await fetch(base+"?apiKey="+encodeURIComponent(CFG.key)+"&limit=1000&offset="+off);
-   const j=await r.json();
-   if(j.responseCode!==200)throw new Error(j.message||("erro "+j.responseCode));
-   all=all.concat(j.content);if(j.content.length<1000)break;off+=1000}
+  let all=[];
+  for(const id of String(CFG.ids[tp]).split(/[\s,;]+/).filter(Boolean)){
+   const base=(CFG.eu?"https://eu-api.jotform.com":"https://api.jotform.com")+"/form/"+id+"/submissions";let off=0;
+   for(;;){
+    const r=await fetch(base+"?apiKey="+encodeURIComponent(CFG.key)+"&limit=1000&offset="+off);
+    const j=await r.json();
+    if(j.responseCode!==200)throw new Error(j.message||("erro "+j.responseCode));
+    all=all.concat(j.content);if(j.content.length<1000)break;off+=1000}}
   DATA[tp]=all.filter(x=>x.status!=="DELETED").map(x=>conv(x,tp)).filter(Boolean).sort((a,b)=>a.t<b.t?-1:1);
   salvar();ult=new Date().toLocaleTimeString("pt-BR")
  }catch(e){err="Não consegui atualizar ("+(e.message||"falha de conexão")+"). Confira a chave, a região e o ID do formulário."}
@@ -142,7 +144,7 @@ async function buscar(tp){
  const ed=document.activeElement&&/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName);
  if(ed)$("live").textContent=liveTxt();else render()}
 function agendar(){clearInterval(tm);tm=setInterval(()=>{if(!pausa&&!document.hidden)buscar(tipo)},CFG.seg*1000)}
-function vLive(){return '<div class="card"><h2>🔴 Atualização em tempo real (Jotform)</h2><p class="mut" style="margin-top:0">Cole uma chave de API <b>somente de leitura</b> (Jotform → Configurações → API → criar chave com permissão de leitura). A chave fica só neste navegador e não é enviada a ninguém além do Jotform. Não use em computador compartilhado.</p><div class="grid two"><label>Chave de API<br><input type="password" id="ck" value="'+esc(CFG.key)+'" style="width:100%" autocomplete="off"></label><label>Região da conta<br><select id="cr" style="width:100%"><option value="0"'+(CFG.eu?'':' selected')+'>Padrão (api.jotform.com)</option><option value="1"'+(CFG.eu?' selected':'')+'>Europa (eu-api.jotform.com)</option></select></label><label>Formulário dos liderados (ID)<br><input type="search" id="c1" value="'+esc(CFG.ids.lideres)+'" style="width:100%"></label><label>Formulário dos voluntários (ID)<br><input type="search" id="c2" value="'+esc(CFG.ids.voluntarios)+'" style="width:100%"></label><label>Atualizar a cada<br><select id="cs" style="width:100%">'+[30,60,120].map(x=>'<option value="'+x+'"'+(CFG.seg===x?' selected':'')+'>'+x+' segundos</option>').join("")+'</select></label></div><div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap"><button class="btn" onclick="salvarCfg()">Salvar e conectar</button><button class="btn s" onclick="buscar(tipo)">Atualizar agora</button><button class="btn s" onclick="pausa=!pausa;render()">'+(pausa?'Retomar':'Pausar')+'</button><button class="btn s" onclick="desconectar()">Desconectar</button></div></div>'}
+function vLive(){return '<div class="card"><h2>🔴 Atualização em tempo real (Jotform)</h2><p class="mut" style="margin-top:0">Cole uma chave de API <b>somente de leitura</b> (Jotform → Configurações → API → criar chave com permissão de leitura). A chave fica só neste navegador e não é enviada a ninguém além do Jotform. Não use em computador compartilhado.</p><div class="grid two"><label>Chave de API<br><input type="password" id="ck" value="'+esc(CFG.key)+'" style="width:100%" autocomplete="off"></label><label>Região da conta<br><select id="cr" style="width:100%"><option value="0"'+(CFG.eu?'':' selected')+'>Padrão (api.jotform.com)</option><option value="1"'+(CFG.eu?' selected':'')+'>Europa (eu-api.jotform.com)</option></select></label><label>Formulário dos liderados (ID)<br><input type="search" id="c1" value="'+esc(CFG.ids.lideres)+'" style="width:100%"></label><label>Formulário(s) dos voluntários (ID; mais de um separado por vírgula)<br><input type="search" id="c2" value="'+esc(CFG.ids.voluntarios)+'" style="width:100%"></label><label>Atualizar a cada<br><select id="cs" style="width:100%">'+[30,60,120].map(x=>'<option value="'+x+'"'+(CFG.seg===x?' selected':'')+'>'+x+' segundos</option>').join("")+'</select></label></div><div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap"><button class="btn" onclick="salvarCfg()">Salvar e conectar</button><button class="btn s" onclick="buscar(tipo)">Atualizar agora</button><button class="btn s" onclick="pausa=!pausa;render()">'+(pausa?'Retomar':'Pausar')+'</button><button class="btn s" onclick="desconectar()">Desconectar</button></div></div>'}
 function salvarCfg(){CFG.key=$("ck").value.trim();CFG.eu=$("cr").value==="1";CFG.ids={lideres:$("c1").value.trim(),voluntarios:$("c2").value.trim()};CFG.seg=+$("cs").value;salvarC();err="";pausa=false;agendar();buscar(tipo)}
 function desconectar(){CFG.key="";salvarC();clearInterval(tm);err="";render()}
 document.addEventListener("visibilitychange",()=>{if(!document.hidden&&CFG.key)buscar(tipo)});
